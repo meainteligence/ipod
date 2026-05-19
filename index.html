@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>iPod Glass Pro</title>
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <div class="glass-background">
+        <div class="blob blob-1"></div>
+        <div class="blob blob-2"></div>
+        <div class="blob blob-3"></div>
+    </div>
+
+    <div class="iphone-container">
+        
+        <div class="liquid-screen">
+            <div class="status-bar">
+                <span class="time" id="live-time">00:00</span>
+                <span id="player-status">■ Parado</span>
+                <span class="battery" id="real-battery">--% 🔋</span>
+            </div>
+            
+            <div class="screen-content">
+                <div id="view-menu" class="view active">
+                    <h2 class="menu-title">iPod </h2>
+                    <ul class="glass-menu" id="menu-list">
+                        <li class="active" data-target="songs">Minhas Músicas</li>
+                        <li data-target="import">Importar Músicas</li>
+                    </ul>
+                </div>
+
+                <div id="view-list" class="view">
+                    <h2 class="menu-title">Músicas</h2>
+                    <ul class="glass-menu" id="dynamic-list">
+                        </ul>
+                </div>
+
+                <div id="view-import" class="view">
+                    <h2 class="menu-title">Importar</h2>
+                    <div class="import-container">
+                        <p>Selecione arquivos MP3 do seu iPhone para salvar no iPod:</p>
+                        <label for="file-input" class="upload-btn">Escolher Arquivos</label>
+                        <input type="file" id="file-input" accept="audio/mp3" multiple style="display:none;">
+                    </div>
+                </div>
+
+                <div id="view-playing" class="view">
+                    <div class="cover-art">🎵</div>
+                    <div class="song-info">
+                        <h3 id="now-playing-title">Nome da Música</h3>
+                        <p id="now-playing-artist">Local Storage</p>
+                    </div>
+                    <div class="progress-container">
+                        <span id="time-current">0:00</span>
+                        <div class="progress-bar"><div id="progress-fill"></div></div>
+                        <span id="time-total">0:00</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="liquid-wheel" id="wheel">
+            <div class="wheel-area-btn menu-btn" id="btn-menu">MENU</div>
+            <div class="wheel-area-btn prev-btn" id="btn-prev">◀◀</div>
+            <div class="wheel-area-btn next-btn" id="btn-next">▶▶</div>
+            <div class="wheel-area-btn play-btn" id="btn-play">▶Ⅱ</div>
+            <div class="liquid-center-button" id="btn-center"></div>
+        </div>
+        
+    </div>
+
+    <audio id="audio-player"></audio>
+
+    <script src="script.js"></script>
+</body>
+</html>

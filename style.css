@@ -1,0 +1,93 @@
+* {
+    box-sizing: border-box;
+    margin: 0; padding: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    -webkit-tap-highlight-color: transparent;
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+body {
+    background-color: #050308;
+    overflow: hidden;
+    height: 100vh; width: 100vw;
+    display: flex; justify-content: center; align-items: center;
+    position: fixed;
+}
+
+/* Background Colorido Fluido */
+.glass-background { position: absolute; width: 100%; height: 100%; overflow: hidden; z-index: 1; }
+.blob { position: absolute; border-radius: 50%; filter: blur(65px); opacity: 0.6; animation: move 12s infinite alternate ease-in-out; }
+.blob-1 { width: 300px; height: 300px; background: #ffffff; top: -20px; left: -20px; }
+.blob-2 { width: 400px; height: 400px; background: #ffffff; bottom: -80px; right: -40px; animation-delay: -4s; }
+.blob-3 { width: 280px; height: 280px; background: #4c4b4b; top: 35%; left: 15%; animation-delay: -8s; }
+@keyframes move { 0% { transform: translate(0, 0) scale(1); } 100% { transform: translate(50px, 40px) scale(1.15); } }
+
+.iphone-container {
+    position: relative; z-index: 2;
+    width: 100%; max-width: 390px; height: 100vh;
+    padding: 60px 25px 40px 25px;
+    display: flex; flex-direction: column; justify-content: space-between; align-items: center;
+}
+
+/* Tela Liquid Glass */
+.liquid-screen {
+    width: 100%; height: 44vh;
+    background: rgba(255, 255, 255, 0.07);
+    backdrop-filter: blur(30px); -webkit-backdrop-filter: blur(30px);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 28px; overflow: hidden; color: white;
+    box-shadow: 0 20px 40px rgba(0,0,0,0.4);
+}
+
+.status-bar { display: flex; justify-content: space-between; padding: 12px 20px; background: rgba(0, 0, 0, 0.2); font-size: 12px; font-weight: 600; }
+.screen-content { position: relative; height: calc(100% - 40px); width: 100%; }
+
+/* Sistema de Telas */
+.view {
+    position: absolute; width: 100%; height: 100%; padding: 20px;
+    display: flex; flex-direction: column; opacity: 0; pointer-events: none;
+}
+.view.active { opacity: 1; pointer-events: auto; }
+
+.menu-title { font-size: 22px; margin-bottom: 12px; font-weight: 700; }
+.glass-menu { list-style: none; overflow-y: auto; max-height: 80%; }
+.glass-menu li {
+    padding: 12px 15px; font-size: 16px; font-weight: 500; border-radius: 10px; margin-bottom: 4px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.glass-menu li.active { background: rgba(255, 255, 255, 0.25); font-weight: 700; }
+
+/* Tela de Importação */
+.import-container { display: flex; flex-direction: column; gap: 15px; text-align: center; margin-top: 20px; }
+.import-container p { font-size: 14px; color: rgba(255,255,255,0.7); }
+.upload-btn { background: linear-gradient(135deg, #00f0ff, #7f00ff); padding: 15px; border-radius: 12px; font-weight: 600; cursor: pointer; display: block; }
+
+/* Layout Player */
+#view-playing { align-items: center; justify-content: space-between; }
+.cover-art { width: 110px; height: 110px; background: rgba(255,255,255,0.1); border-radius: 20px; display: flex; align-items: center; justify-content: center; font-size: 40px; border: 1px solid rgba(255,255,255,0.2); }
+.song-info { text-align: center; width: 100%; }
+.progress-container { display: flex; align-items: center; width: 100%; gap: 10px; font-size: 11px; }
+.progress-bar { flex-grow: 1; height: 5px; background: rgba(255,255,255,0.2); border-radius: 3px; overflow: hidden; }
+#progress-fill { width: 0%; height: 100%; background: #00f0ff; }
+
+/* Click Wheel Físico */
+.liquid-wheel {
+    position: relative; width: 220px; height: 220px;
+    background: rgba(255, 255, 255, 0.05);
+    backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.15); border-radius: 50%;
+    box-shadow: 0 15px 35px rgba(0,0,0,0.3); margin-bottom: 40px;
+    touch-action: none;
+}
+.wheel-area-btn { position: absolute; color: rgba(255, 255, 255, 0.6); font-weight: bold; font-size: 13px; padding: 20px; z-index: 10; }
+.menu-btn { top: 0; left: 50%; transform: translateX(-50%); }
+.prev-btn { top: 50%; left: 0; transform: translateY(-50%); }
+.next-btn { top: 50%; right: 0; transform: translateY(-50%); }
+.play-btn { bottom: 0; left: 50%; transform: translateX(-50%); }
+
+.liquid-center-button {
+    position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    width: 76px; height: 76px; background: rgba(255, 255, 255, 0.12);
+    border: 1px solid rgba(255, 255, 255, 0.25); border-radius: 50%; z-index: 12;
+}
