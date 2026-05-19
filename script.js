@@ -9,13 +9,11 @@ document.addEventListener("DOMContentLoaded", () => {
     let currentActiveListId = 'menu-list';
     let db;
     
-    // Estados novos do iPod
     let isShuffle = false;
-
-    // Reduz o volume do som do clique para não estourar o ouvido
+    audio.volume = 0.7;
     clickSound.volume = 0.4;
 
-    // --- 1. CONFIGURAÇÃO DO BANCO DE DADOS LOCAL ---
+    // --- 1. BANCO DE DADOS LOCAL ---
     const request = indexedDB.open("iPodGlassStorage", 1);
     request.onupgradeneeded = (e) => {
         db = e.target.result;
@@ -38,20 +36,17 @@ document.addEventListener("DOMContentLoaded", () => {
         };
     }
 
-    // Som de Clique customizado que funciona no iPhone
     function playClick() {
         clickSound.currentTime = 0;
-        // O iOS exige que o áudio seja disparado imediatamente no touch
         clickSound.play().catch(() => {}); 
     }
 
-    // --- 2. ROLAGEM E SELEÇÃO DE MENUS ---
+    // --- 2. SINCRO VISUAL DA TELA ---
     function updateMenuSelection() {
         const items = document.querySelectorAll(`#${currentActiveListId} li`);
         items.forEach((item, index) => {
             if (index === currentIndex) {
                 item.classList.add('active');
-                // Alinha automaticamente a tela para acompanhar o cursor subindo/descendo
                 item.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
             } else {
                 item.classList.remove('active');
@@ -76,15 +71,14 @@ document.addEventListener("DOMContentLoaded", () => {
             currentIndex = 0;
         } else {
             tracks.forEach((track, index) => {
-                list.innerHTML += `<li class="${index === 0 ? 'active' : ''}" data-index="${index}">${track.name}</li>`;
+                list.innerHTML += `<li class="${index === currentIndex ? 'active' : ''}" data-index="${index}">${track.name}</li>`;
             });
             currentActiveListId = 'dynamic-list';
-            currentIndex = 0;
         }
         changeView('view-list', 'list');
     }
 
-    // --- 3. REPRODUÇÃO AUTOMÁTICA E SHUFFLE ---
+    // --- 3. MOTOR DE ÁUDIO ---
     function playTrack(index) {
         if (!tracks[index]) return;
         currentIndex = index;
@@ -103,22 +97,16 @@ document.addEventListener("DOMContentLoaded", () => {
         changeView('view-playing', 'playing');
     }
 
-    // Evento de Fim de Música: Trata a Reprodução Automática
     audio.addEventListener('ended', () => {
         if (tracks.length === 0) return;
-
         if (isShuffle) {
-            // Escolhe um índice aleatório diferente do atual
-            let randomIndex = Math.floor(Math.random() * tracks.length);
-            playTrack(randomIndex);
+            playTrack(Math.floor(Math.random() * tracks.length));
         } else {
-            // Toca a próxima da fila sequencialmente
-            let nextIndex = (currentIndex + 1) % tracks.length;
-            playTrack(nextIndex);
+            playTrack((currentIndex + 1) % tracks.length);
         }
     });
 
-    // --- 4. EXCLUIR MÚSICA DIRECTO NO PLAYER ---
+    // Excluir música
     document.getElementById('btn-delete-song').addEventListener('touchstart', (e) => {
         e.preventDefault();
         playClick();
@@ -129,63 +117,127 @@ document.addEventListener("DOMContentLoaded", () => {
             store.delete(trackId);
 
             transaction.oncomplete = () => {
-                alert("Música removida do aparelho!");
                 loadSavedTracks();
-                // Volta para o menu
-                changeView('view-menu', 'menu');
-                currentActiveListId = 'menu-list';
                 currentIndex = 0;
-                updateMenuSelection();
+                setTimeout(() => renderSongsList(), 100);
             };
         }
     });
 
-    // --- 5. MAPEAMENTO DE TOQUES NA RODA ---
+    // --- 4. ENGINE DE ROTAÇÃO PRECISA (TRAVA CLIQUES INDEVIDOS) ---
+    let lastAngle = null;
+    let accumulatedRotation = 0;
+    let isMoving = false; 
+    const sensitivityMenu = 15; // Menor número = mais rápida e ultra sensível a rotação
+    const sensitivityVolume = 5;
+
     wheel.addEventListener('touchstart', (e) => {
-        e.preventDefault();
-        const targetId = e.target.id;
+        isMoving = false; // Começa assumindo que pode ser um clique comum
+        lastAngle = null;
+        accumulatedRotation = 0;
+    }, { passive: true });
+
+    wheel.addEventListener('touchmove', (e) => {
+        e.preventDefault(); // Impede o iPhone de tremer a tela ou dar zoom
         
-        // Toca o estalo personalizado em qualquer clique
-        if (targetId) playClick();
+        const rect = wheel.getBoundingClientRect();
+        const centerX = rect.left + rect.width / 2;
+        const centerY = rect.top + rect.height / 2;
+        
+        const touchX = e.touches[0].clientX;
+        const touchY = e.touches[0].clientY;
+        
+        // Descobre a posição matemática do dedo na bola
+        const angle = Math.atan2(touchY - centerY, touchX - centerX);
+        
+        if (lastAngle !== null) {
+            let delta = angle - lastAngle;
+            if (delta > Math.PI) delta -= 2 * Math.PI;
+            if (delta < -Math.PI) delta += 2 * Math.PI;
+            
+            const degrees = delta * (180 / Math.PI);
+            
+            // Se o dedo mover mais de 1 grau em curva, ativa o "Modo Giro" e BLOQUEIA os botões
+            if (Math.abs(degrees) > 1) {
+                isMoving = true; 
+            }
+            
+            accumulatedRotation += degrees;
+
+            // Se estiver na tela tocando a música, girar altera o Volume
+            if (currentView === 'playing') {
+                if (Math.abs(accumulatedRotation) >= sensitivityVolume) {
+                    if (accumulatedRotation > 0) {
+                        audio.volume = Math.min(1, audio.volume + 0.04);
+                    } else {
+                        audio.volume = Math.max(0, audio.volume - 0.04);
+                    }
+                    document.getElementById('player-status').innerText = `🔊 Vol: ${Math.round(audio.volume * 100)}%`;
+                    
+                    clearTimeout(window.volumeTimeout);
+                    window.volumeTimeout = setTimeout(() => {
+                        document.getElementById('player-status').innerText = audio.paused ? 'Ⅱ Pausado' : '▶ Tocando';
+                    }, 1200);
+
+                    accumulatedRotation = 0;
+                }
+            } 
+            // Se estiver nas listas ou menus, girar ROLA AS OPÇÕES (Sem precisar clicar)
+            else if (currentView === 'menu' || currentView === 'list') {
+                if (Math.abs(accumulatedRotation) >= sensitivityMenu) {
+                    const items = document.querySelectorAll(`#${currentActiveListId} li`);
+                    if (items.length > 0) {
+                        playClick(); // Faz o som clássico de estalo enquanto gira!
+                        if (accumulatedRotation > 0) {
+                            currentIndex = (currentIndex + 1) % items.length;
+                        } else {
+                            currentIndex = (currentIndex - 1 + items.length) % items.length;
+                        }
+                        updateMenuSelection();
+                    }
+                    accumulatedRotation = 0;
+                }
+            }
+        }
+        lastAngle = angle;
+    }, { passive: false });
+
+    wheel.addEventListener('touchend', (e) => {
+        lastAngle = null;
+        
+        // Se você estava deslizando o dedo em círculos, ignora totalmente o clique
+        if (isMoving) return; 
+
+        // Se o dedo foi apenas pressionado e solto no mesmo lugar, processa como clique físico
+        const targetId = e.target.id;
+        if (targetId) playClick(); 
 
         if (targetId === 'btn-menu') {
-            if (currentView !== 'menu') {
+            if (currentView === 'playing') {
+                currentActiveListId = 'dynamic-list';
+                renderSongsList();
+            } else if (currentView === 'list' || currentView === 'import') {
                 changeView('view-menu', 'menu');
                 currentActiveListId = 'menu-list';
                 currentIndex = 0;
                 updateMenuSelection();
             }
         } 
+        
         else if (targetId === 'btn-next') {
-            if (currentView === 'menu' || currentView === 'list') {
-                const items = document.querySelectorAll(`#${currentActiveListId} li`);
-                if (items.length > 0) {
-                    currentIndex = (currentIndex + 1) % items.length;
-                    updateMenuSelection();
-                }
-            } else if (currentView === 'playing' && tracks.length > 1) {
-                if (isShuffle) {
-                    playTrack(Math.floor(Math.random() * tracks.length));
-                } else {
-                    playTrack((currentIndex + 1) % tracks.length);
-                }
+            if (currentView === 'playing' && tracks.length > 1) {
+                if (isShuffle) playTrack(Math.floor(Math.random() * tracks.length));
+                else playTrack((currentIndex + 1) % tracks.length);
             }
         } 
+        
         else if (targetId === 'btn-prev') {
-            if (currentView === 'menu' || currentView === 'list') {
-                const items = document.querySelectorAll(`#${currentActiveListId} li`);
-                if (items.length > 0) {
-                    currentIndex = (currentIndex - 1 + items.length) % items.length;
-                    updateMenuSelection();
-                }
-            } else if (currentView === 'playing' && tracks.length > 1) {
-                if (isShuffle) {
-                    playTrack(Math.floor(Math.random() * tracks.length));
-                } else {
-                    playTrack((currentIndex - 1 + tracks.length) % tracks.length);
-                }
+            if (currentView === 'playing' && tracks.length > 1) {
+                if (isShuffle) playTrack(Math.floor(Math.random() * tracks.length));
+                else playTrack((currentIndex - 1 + tracks.length) % tracks.length);
             }
         } 
+        
         else if (targetId === 'btn-play') {
             if (!audio.src) return;
             if (audio.paused) {
@@ -196,17 +248,15 @@ document.addEventListener("DOMContentLoaded", () => {
                 document.getElementById('player-status').innerText = 'Ⅱ Pausado';
             }
         } 
+        
         else if (targetId === 'btn-center') {
             if (currentView === 'menu') {
                 const activeItem = document.querySelector('#menu-list li.active');
                 if (activeItem) {
                     const target = activeItem.getAttribute('data-target');
-                    if (target === 'import') {
-                        changeView('view-import', 'import');
-                    } else if (target === 'songs') {
-                        renderSongsList();
-                    } else if (target === 'shuffle-toggle') {
-                        // Inverte o modo Shuffle
+                    if (target === 'import') changeView('view-import', 'import');
+                    else if (target === 'songs') renderSongsList();
+                    else if (target === 'shuffle-toggle') {
                         isShuffle = !isShuffle;
                         document.getElementById('menu-shuffle-status').innerText = `Modo Aleatório: ${isShuffle ? 'ON 🔀' : 'OFF'}`;
                     }
@@ -219,25 +269,9 @@ document.addEventListener("DOMContentLoaded", () => {
                 }
             }
         }
-    }, { passive: false });
-
-    // --- 6. SALVAMENTO DE ARQUIVOS ---
-    document.getElementById('file-input').addEventListener('change', (e) => {
-        const files = e.target.files;
-        if (files.length > 0 && db) {
-            const transaction = db.transaction(["tracks"], "readwrite");
-            const store = transaction.objectStore("tracks");
-            for (let i = 0; i < files.length; i++) {
-                store.add({ name: files[i].name.replace('.mp3', ''), file: files[i] });
-            }
-            transaction.oncomplete = () => {
-                loadSavedTracks();
-                setTimeout(() => renderSongsList(), 100);
-            };
-        }
     });
 
-    // Atualização da barra azul
+    // --- 5. COMPLEMENTOS ---
     audio.addEventListener('timeupdate', () => {
         if (isNaN(audio.duration)) return;
         const progress = (audio.currentTime / audio.duration) * 100;
@@ -252,13 +286,10 @@ document.addEventListener("DOMContentLoaded", () => {
         return `${min}:${sec < 10 ? '0' : ''}${sec}`;
     }
 
-    // --- 7. SISTEMA DE BATERIA SIMULADA REALISTA PARA IPHONE ---
     let initialBattery = 88; 
     setInterval(() => {
         const now = new Date();
         document.getElementById('live-time').innerText = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
-        
-        // A cada poucos minutos altera de forma randômica simulada
         if (now.getMinutes() % 12 === 0 && now.getSeconds() === 0) {
             initialBattery = Math.max(5, initialBattery - 1);
         }
