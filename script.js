@@ -7,8 +7,8 @@ document.addEventListener("DOMContentLoaded", () => {
     let currentIndex = 0;
     let currentActiveListId = 'menu-list';
     let db;
+    let isShuffle = false; 
 
-    // Configura o volume inicial em 70%
     audio.volume = 0.7;
 
     // --- 1. CONFIGURAÇÃO DO BANCO DE DADOS LOCAL ---
@@ -34,12 +34,24 @@ document.addEventListener("DOMContentLoaded", () => {
         };
     }
 
-    // --- 2. CONTROLE DE GIRO (VOLUME VS MENU) ---
+    // Função direta para deletar via ID do IndexedDB
+    function deleteTrackById(id, name) {
+        if (confirm(`Deseja mesmo apagar "${name}" do iPod?`)) {
+            const transaction = db.transaction(["tracks"], "readwrite");
+            const store = transaction.objectStore("tracks");
+            store.delete(id);
+            transaction.oncomplete = () => {
+                loadSavedTracks();
+            };
+        }
+    }
+
+    // --- 2. CONTROLE DE GIRO (WHEEL ROTAÇÃO) ---
     let lastAngle = null;
     let accumulatedRotation = 0;
     let isMoving = false; 
-    const sensitivityMenu = 20; // Sensibilidade para mudar de opção no menu
-    const sensitivityVolume = 5; // Menor número = mais rápido para alterar o volume
+    const sensitivityMenu = 20; 
+    const sensitivityVolume = 5; 
 
     wheel.addEventListener('touchstart', (e) => {
         isMoving = false;
@@ -47,7 +59,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }, { passive: true });
 
     wheel.addEventListener('touchmove', (e) => {
-        e.preventDefault(); // Impede o Safari de arrastar a página
+        e.preventDefault(); 
         
         const rect = wheel.getBoundingClientRect();
         const centerX = rect.left + rect.width / 2;
@@ -55,8 +67,6 @@ document.addEventListener("DOMContentLoaded", () => {
         
         const touchX = e.touches[0].clientX;
         const touchY = e.touches[0].clientY;
-        
-        // Calcula o ângulo do dedo em relação ao centro da roda
         const angle = Math.atan2(touchY - centerY, touchX - centerX);
         
         if (lastAngle !== null) {
@@ -69,20 +79,15 @@ document.addEventListener("DOMContentLoaded", () => {
             
             accumulatedRotation += degrees;
 
-            // MODO 1: Se estiver na tela tocando música, o giro controla o VOLUME
             if (currentView === 'playing') {
                 if (Math.abs(accumulatedRotation) >= sensitivityVolume) {
                     if (accumulatedRotation > 0) {
-                        // Girou sentido horário: Aumenta o volume (máximo 1.0)
                         audio.volume = Math.min(1, audio.volume + 0.05);
                     } else {
-                        // Girou sentido anti-horário: Diminui o volume (mínimo 0.0)
                         audio.volume = Math.max(0, audio.volume - 0.05);
                     }
-                    // Mostra o feedback visual do volume no status do player
                     document.getElementById('player-status').innerText = `🔊 Vol: ${Math.round(audio.volume * 100)}%`;
                     
-                    // Reseta o texto do status após 1.5 segundos
                     clearTimeout(window.volumeTimeout);
                     window.volumeTimeout = setTimeout(() => {
                         document.getElementById('player-status').innerText = audio.paused ? 'Ⅱ Pausado' : '▶ Tocando';
@@ -91,7 +96,6 @@ document.addEventListener("DOMContentLoaded", () => {
                     accumulatedRotation = 0;
                 }
             } 
-            // MODO 2: Se estiver nos menus, o giro move as OPÇÕES
             else if (currentView === 'menu' || currentView === 'list') {
                 if (Math.abs(accumulatedRotation) >= sensitivityMenu) {
                     const items = document.querySelectorAll(`#${currentActiveListId} li`);
@@ -110,9 +114,10 @@ document.addEventListener("DOMContentLoaded", () => {
         lastAngle = angle;
     }, { passive: false });
 
+    // --- 3. EVENTOS DE CLIQUE NOS BOTÕES ---
     wheel.addEventListener('touchend', (e) => {
         lastAngle = null;
-        if (isMoving) return; // Se o dedo deslizou girando, ignora o clique seco do botão
+        if (isMoving) return; 
 
         const targetId = e.target.id;
         
@@ -125,14 +130,26 @@ document.addEventListener("DOMContentLoaded", () => {
             }
         } 
         else if (targetId === 'btn-next') {
-            if (currentView === 'playing' && tracks.length > 1) {
-                currentIndex = (currentIndex + 1) % tracks.length;
-                playTrack(currentIndex);
+            if (currentView === 'playing') {
+                nextTrack();
+            } 
+            // Se estiver na lista de músicas, o botão NEXT serve como atalho para Deletar a selecionada
+            else if (currentView === 'list' && tracks.length > 0) {
+                const activeSong = document.querySelector('#dynamic-list li.active');
+                if (activeSong) {
+                    const songIndex = parseInt(activeSong.getAttribute('data-index'));
+                    const track = tracks[songIndex];
+                    if (track) deleteTrackById(track.id, track.name);
+                }
             }
         } 
         else if (targetId === 'btn-prev') {
             if (currentView === 'playing' && tracks.length > 1) {
-                currentIndex = (currentIndex - 1 + tracks.length) % tracks.length;
+                if (isShuffle) {
+                    currentIndex = Math.floor(Math.random() * tracks.length);
+                } else {
+                    currentIndex = (currentIndex - 1 + tracks.length) % tracks.length;
+                }
                 playTrack(currentIndex);
             }
         } 
@@ -151,8 +168,16 @@ document.addEventListener("DOMContentLoaded", () => {
                 const activeItem = document.querySelector('#menu-list li.active');
                 if (activeItem) {
                     const target = activeItem.getAttribute('data-target');
-                    if (target === 'import') changeView('view-import', 'import');
-                    else if (target === 'songs') renderSongsList();
+                    if (target === 'import') {
+                        changeView('view-import', 'import');
+                    } else if (target === 'songs') {
+                        renderSongsList();
+                    } else if (target === 'shuffle-toggle') {
+                        // Ativa/Desativa o Shuffle diretamente na tela de Menu
+                        isShuffle = !isShuffle;
+                        document.getElementById('menu-shuffle-status').innerText = isShuffle ? 'Aleatório: ON 🔀' : 'Aleatório: OFF';
+                        document.getElementById('shuffle-indicator').style.display = isShuffle ? 'inline' : 'none';
+                    }
                 }
             } else if (currentView === 'list') {
                 const activeSong = document.querySelector('#dynamic-list li.active');
@@ -164,12 +189,46 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     });
 
-    // --- 3. FUNÇÕES AUXILIARES DE INTERFACE ---
+    // --- LÓGICA DE PRÓXIMA MÚSICA (PRO SHUFFLE / CONTINUAÇÃO AUTOMÁTICA) ---
+    function nextTrack() {
+        if (tracks.length > 1) {
+            if (isShuffle) {
+                currentIndex = Math.floor(Math.random() * tracks.length);
+            } else {
+                currentIndex = (currentIndex + 1) % tracks.length;
+            }
+            playTrack(currentIndex);
+        } else if (tracks.length === 1) {
+            playTrack(0); 
+        }
+    }
+
+    // CONTINUAÇÃO AUTOMÁTICA DA PLAYLIST
+    audio.addEventListener('ended', () => {
+        nextTrack();
+    });
+
+    // --- FUNÇÕES AUXILIARES DE INTERFACE ---
     function updateMenuSelection() {
         const items = document.querySelectorAll(`#${currentActiveListId} li`);
         items.forEach((item, index) => {
             item.classList.toggle('active', index === currentIndex);
+            
+            // Remove lixeiras antigas na renderização dinâmica
+            const trash = item.querySelector('.trash-icon');
+            if (trash) trash.remove();
+
+            // Adiciona indicador visual de lixeira apenas no item selecionado da lista de músicas
+            if (index === currentIndex && currentActiveListId === 'dynamic-list' && tracks.length > 0) {
+                item.innerHTML += `<span class="trash-icon" style="float:right;">🗑️</span>`;
+            }
         });
+
+        // Faz scroll automático para acompanhar a seleção caso ultrapasse a tela
+        const activeItem = document.querySelector(`#${currentActiveListId} li.active`);
+        if (activeItem) {
+            activeItem.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        }
     }
 
     function changeView(viewId, viewMode) {
@@ -183,7 +242,7 @@ document.addEventListener("DOMContentLoaded", () => {
         const list = document.getElementById('dynamic-list');
         list.innerHTML = '';
         if (tracks.length === 0) {
-            list.innerHTML = '<li class="active">Nenhuma música importada</li>';
+            list.innerHTML = '<li class="active">Nenhuma música</li>';
             currentActiveListId = 'dynamic-list';
             currentIndex = 0;
         } else {
@@ -192,19 +251,21 @@ document.addEventListener("DOMContentLoaded", () => {
             });
             currentActiveListId = 'dynamic-list';
             currentIndex = 0;
+            setTimeout(() => { updateMenuSelection(); }, 20);
         }
         changeView('view-list', 'list');
     }
 
     function playTrack(index) {
         if (!tracks[index]) return;
+        currentIndex = index;
         const track = tracks[index];
         const fileUrl = URL.createObjectURL(track.file);
         
         audio.src = fileUrl;
         audio.play().then(() => {
             document.getElementById('player-status').innerText = '▶ Tocando';
-        });
+        }).catch(err => console.log(err));
         
         document.getElementById('now-playing-title').innerText = track.name;
         changeView('view-playing', 'playing');

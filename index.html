@@ -27,23 +27,27 @@
             
             <div class="screen-content">
                 <div id="view-menu" class="view active">
-                    <h2 class="menu-title">iPod </h2>
+                    <h2 class="menu-title">iPod</h2>
                     <ul class="glass-menu" id="menu-list">
                         <li class="active" data-target="songs">Minhas Músicas</li>
                         <li data-target="import">Importar Músicas</li>
+                        <li data-target="shuffle-toggle" id="menu-shuffle-status">Aleatório: OFF</li>
+                        
                     </ul>
                 </div>
 
                 <div id="view-list" class="view">
                     <h2 class="menu-title">Músicas</h2>
-                    <ul class="glass-menu" id="dynamic-list">
-                        </ul>
+                    <div class="scrollable-list">
+                        <ul class="glass-menu" id="dynamic-list"></ul>
+                    </div>
+                    <div class="list-footer-tip">▶▶ Excluir selecionada</div>
                 </div>
 
                 <div id="view-import" class="view">
                     <h2 class="menu-title">Importar</h2>
                     <div class="import-container">
-                        <p>Selecione arquivos MP3 do seu iPhone para salvar no iPod:</p>
+                        <p>Selecione arquivos MP3 do seu iPhone:</p>
                         <label for="file-input" class="upload-btn">Escolher Arquivos</label>
                         <input type="file" id="file-input" accept="audio/mp3" multiple style="display:none;">
                     </div>
@@ -53,7 +57,7 @@
                     <div class="cover-art">🎵</div>
                     <div class="song-info">
                         <h3 id="now-playing-title">Nome da Música</h3>
-                        <p id="now-playing-artist">Local Storage</p>
+                        <p id="now-playing-artist">Local Storage <span id="shuffle-indicator" style="display:none; color: #00ffcc; margin-left: 5px;">🔀</span></p>
                     </div>
                     <div class="progress-container">
                         <span id="time-current">0:00</span>
