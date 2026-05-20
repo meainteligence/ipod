@@ -1,6 +1,5 @@
 document.addEventListener("DOMContentLoaded", () => {
     const audio = document.getElementById('audio-player');
-    const clickSound = document.getElementById('click-sound');
     const wheel = document.getElementById('wheel');
 
     let tracks = [];
@@ -8,12 +7,11 @@ document.addEventListener("DOMContentLoaded", () => {
     let currentIndex = 0;
     let currentActiveListId = 'menu-list';
     let db;
-    
-    let isShuffle = false;
-    audio.volume = 0.7;
-    clickSound.volume = 0.4;
 
-    // --- 1. BANCO DE DADOS LOCAL ---
+    // Configura o volume inicial em 70%
+    audio.volume = 0.7;
+
+    // --- 1. CONFIGURAÇÃO DO BANCO DE DADOS LOCAL ---
     const request = indexedDB.open("iPodGlassStorage", 1);
     request.onupgradeneeded = (e) => {
         db = e.target.result;
@@ -36,109 +34,20 @@ document.addEventListener("DOMContentLoaded", () => {
         };
     }
 
-    function playClick() {
-        clickSound.currentTime = 0;
-        clickSound.play().catch(() => {}); 
-    }
-
-    // --- 2. SINCRO VISUAL DA TELA ---
-    function updateMenuSelection() {
-        const items = document.querySelectorAll(`#${currentActiveListId} li`);
-        items.forEach((item, index) => {
-            if (index === currentIndex) {
-                item.classList.add('active');
-                item.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-            } else {
-                item.classList.remove('active');
-            }
-        });
-    }
-
-    function changeView(viewId, viewMode) {
-        document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
-        const targetView = document.getElementById(viewId);
-        if (targetView) targetView.classList.add('active');
-        currentView = viewMode;
-    }
-
-    function renderSongsList() {
-        const list = document.getElementById('dynamic-list');
-        list.innerHTML = '';
-        
-        if (tracks.length === 0) {
-            list.innerHTML = '<li class="active">Nenhuma música importada</li>';
-            currentActiveListId = 'dynamic-list';
-            currentIndex = 0;
-        } else {
-            tracks.forEach((track, index) => {
-                list.innerHTML += `<li class="${index === currentIndex ? 'active' : ''}" data-index="${index}">${track.name}</li>`;
-            });
-            currentActiveListId = 'dynamic-list';
-        }
-        changeView('view-list', 'list');
-    }
-
-    // --- 3. MOTOR DE ÁUDIO ---
-    function playTrack(index) {
-        if (!tracks[index]) return;
-        currentIndex = index;
-        const track = tracks[index];
-        const fileUrl = URL.createObjectURL(track.file);
-        
-        audio.src = fileUrl;
-        audio.play().then(() => {
-            document.getElementById('player-status').innerText = '▶ Tocando';
-        }).catch(() => {
-            document.getElementById('player-status').innerText = '⚠ Toque Play';
-        });
-        
-        document.getElementById('now-playing-title').innerText = track.name;
-        document.getElementById('player-shuffle-badge').style.display = isShuffle ? 'inline-block' : 'none';
-        changeView('view-playing', 'playing');
-    }
-
-    audio.addEventListener('ended', () => {
-        if (tracks.length === 0) return;
-        if (isShuffle) {
-            playTrack(Math.floor(Math.random() * tracks.length));
-        } else {
-            playTrack((currentIndex + 1) % tracks.length);
-        }
-    });
-
-    // Excluir música
-    document.getElementById('btn-delete-song').addEventListener('touchstart', (e) => {
-        e.preventDefault();
-        playClick();
-        if (tracks[currentIndex]) {
-            const trackId = tracks[currentIndex].id;
-            const transaction = db.transaction(["tracks"], "readwrite");
-            const store = transaction.objectStore("tracks");
-            store.delete(trackId);
-
-            transaction.oncomplete = () => {
-                loadSavedTracks();
-                currentIndex = 0;
-                setTimeout(() => renderSongsList(), 100);
-            };
-        }
-    });
-
-    // --- 4. ENGINE DE ROTAÇÃO PRECISA (TRAVA CLIQUES INDEVIDOS) ---
+    // --- 2. CONTROLE DE GIRO (VOLUME VS MENU) ---
     let lastAngle = null;
     let accumulatedRotation = 0;
     let isMoving = false; 
-    const sensitivityMenu = 15; // Menor número = mais rápida e ultra sensível a rotação
-    const sensitivityVolume = 5;
+    const sensitivityMenu = 20; // Sensibilidade para mudar de opção no menu
+    const sensitivityVolume = 5; // Menor número = mais rápido para alterar o volume
 
     wheel.addEventListener('touchstart', (e) => {
-        isMoving = false; // Começa assumindo que pode ser um clique comum
+        isMoving = false;
         lastAngle = null;
-        accumulatedRotation = 0;
     }, { passive: true });
 
     wheel.addEventListener('touchmove', (e) => {
-        e.preventDefault(); // Impede o iPhone de tremer a tela ou dar zoom
+        e.preventDefault(); // Impede o Safari de arrastar a página
         
         const rect = wheel.getBoundingClientRect();
         const centerX = rect.left + rect.width / 2;
@@ -147,7 +56,7 @@ document.addEventListener("DOMContentLoaded", () => {
         const touchX = e.touches[0].clientX;
         const touchY = e.touches[0].clientY;
         
-        // Descobre a posição matemática do dedo na bola
+        // Calcula o ângulo do dedo em relação ao centro da roda
         const angle = Math.atan2(touchY - centerY, touchX - centerX);
         
         if (lastAngle !== null) {
@@ -156,38 +65,37 @@ document.addEventListener("DOMContentLoaded", () => {
             if (delta < -Math.PI) delta += 2 * Math.PI;
             
             const degrees = delta * (180 / Math.PI);
-            
-            // Se o dedo mover mais de 1 grau em curva, ativa o "Modo Giro" e BLOQUEIA os botões
-            if (Math.abs(degrees) > 1) {
-                isMoving = true; 
-            }
+            if (Math.abs(degrees) > 1) isMoving = true; 
             
             accumulatedRotation += degrees;
 
-            // Se estiver na tela tocando a música, girar altera o Volume
+            // MODO 1: Se estiver na tela tocando música, o giro controla o VOLUME
             if (currentView === 'playing') {
                 if (Math.abs(accumulatedRotation) >= sensitivityVolume) {
                     if (accumulatedRotation > 0) {
-                        audio.volume = Math.min(1, audio.volume + 0.04);
+                        // Girou sentido horário: Aumenta o volume (máximo 1.0)
+                        audio.volume = Math.min(1, audio.volume + 0.05);
                     } else {
-                        audio.volume = Math.max(0, audio.volume - 0.04);
+                        // Girou sentido anti-horário: Diminui o volume (mínimo 0.0)
+                        audio.volume = Math.max(0, audio.volume - 0.05);
                     }
+                    // Mostra o feedback visual do volume no status do player
                     document.getElementById('player-status').innerText = `🔊 Vol: ${Math.round(audio.volume * 100)}%`;
                     
+                    // Reseta o texto do status após 1.5 segundos
                     clearTimeout(window.volumeTimeout);
                     window.volumeTimeout = setTimeout(() => {
                         document.getElementById('player-status').innerText = audio.paused ? 'Ⅱ Pausado' : '▶ Tocando';
-                    }, 1200);
+                    }, 1500);
 
                     accumulatedRotation = 0;
                 }
             } 
-            // Se estiver nas listas ou menus, girar ROLA AS OPÇÕES (Sem precisar clicar)
+            // MODO 2: Se estiver nos menus, o giro move as OPÇÕES
             else if (currentView === 'menu' || currentView === 'list') {
                 if (Math.abs(accumulatedRotation) >= sensitivityMenu) {
                     const items = document.querySelectorAll(`#${currentActiveListId} li`);
                     if (items.length > 0) {
-                        playClick(); // Faz o som clássico de estalo enquanto gira!
                         if (accumulatedRotation > 0) {
                             currentIndex = (currentIndex + 1) % items.length;
                         } else {
@@ -204,40 +112,30 @@ document.addEventListener("DOMContentLoaded", () => {
 
     wheel.addEventListener('touchend', (e) => {
         lastAngle = null;
-        
-        // Se você estava deslizando o dedo em círculos, ignora totalmente o clique
-        if (isMoving) return; 
+        if (isMoving) return; // Se o dedo deslizou girando, ignora o clique seco do botão
 
-        // Se o dedo foi apenas pressionado e solto no mesmo lugar, processa como clique físico
         const targetId = e.target.id;
-        if (targetId) playClick(); 
-
+        
         if (targetId === 'btn-menu') {
-            if (currentView === 'playing') {
-                currentActiveListId = 'dynamic-list';
-                renderSongsList();
-            } else if (currentView === 'list' || currentView === 'import') {
+            if (currentView !== 'menu') {
                 changeView('view-menu', 'menu');
                 currentActiveListId = 'menu-list';
                 currentIndex = 0;
                 updateMenuSelection();
             }
         } 
-        
         else if (targetId === 'btn-next') {
             if (currentView === 'playing' && tracks.length > 1) {
-                if (isShuffle) playTrack(Math.floor(Math.random() * tracks.length));
-                else playTrack((currentIndex + 1) % tracks.length);
+                currentIndex = (currentIndex + 1) % tracks.length;
+                playTrack(currentIndex);
             }
         } 
-        
         else if (targetId === 'btn-prev') {
             if (currentView === 'playing' && tracks.length > 1) {
-                if (isShuffle) playTrack(Math.floor(Math.random() * tracks.length));
-                else playTrack((currentIndex - 1 + tracks.length) % tracks.length);
+                currentIndex = (currentIndex - 1 + tracks.length) % tracks.length;
+                playTrack(currentIndex);
             }
         } 
-        
         else if (targetId === 'btn-play') {
             if (!audio.src) return;
             if (audio.paused) {
@@ -248,7 +146,6 @@ document.addEventListener("DOMContentLoaded", () => {
                 document.getElementById('player-status').innerText = 'Ⅱ Pausado';
             }
         } 
-        
         else if (targetId === 'btn-center') {
             if (currentView === 'menu') {
                 const activeItem = document.querySelector('#menu-list li.active');
@@ -256,10 +153,6 @@ document.addEventListener("DOMContentLoaded", () => {
                     const target = activeItem.getAttribute('data-target');
                     if (target === 'import') changeView('view-import', 'import');
                     else if (target === 'songs') renderSongsList();
-                    else if (target === 'shuffle-toggle') {
-                        isShuffle = !isShuffle;
-                        document.getElementById('menu-shuffle-status').innerText = `Modo Aleatório: ${isShuffle ? 'ON 🔀' : 'OFF'}`;
-                    }
                 }
             } else if (currentView === 'list') {
                 const activeSong = document.querySelector('#dynamic-list li.active');
@@ -271,7 +164,67 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     });
 
-    // --- 5. COMPLEMENTOS ---
+    // --- 3. FUNÇÕES AUXILIARES DE INTERFACE ---
+    function updateMenuSelection() {
+        const items = document.querySelectorAll(`#${currentActiveListId} li`);
+        items.forEach((item, index) => {
+            item.classList.toggle('active', index === currentIndex);
+        });
+    }
+
+    function changeView(viewId, viewMode) {
+        document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+        const targetView = document.getElementById(viewId);
+        if (targetView) targetView.classList.add('active');
+        currentView = viewMode;
+    }
+
+    function renderSongsList() {
+        const list = document.getElementById('dynamic-list');
+        list.innerHTML = '';
+        if (tracks.length === 0) {
+            list.innerHTML = '<li class="active">Nenhuma música importada</li>';
+            currentActiveListId = 'dynamic-list';
+            currentIndex = 0;
+        } else {
+            tracks.forEach((track, index) => {
+                list.innerHTML += `<li class="${index === 0 ? 'active' : ''}" data-index="${index}">${track.name}</li>`;
+            });
+            currentActiveListId = 'dynamic-list';
+            currentIndex = 0;
+        }
+        changeView('view-list', 'list');
+    }
+
+    function playTrack(index) {
+        if (!tracks[index]) return;
+        const track = tracks[index];
+        const fileUrl = URL.createObjectURL(track.file);
+        
+        audio.src = fileUrl;
+        audio.play().then(() => {
+            document.getElementById('player-status').innerText = '▶ Tocando';
+        });
+        
+        document.getElementById('now-playing-title').innerText = track.name;
+        changeView('view-playing', 'playing');
+    }
+
+    document.getElementById('file-input').addEventListener('change', (e) => {
+        const files = e.target.files;
+        if (files.length > 0 && db) {
+            const transaction = db.transaction(["tracks"], "readwrite");
+            const store = transaction.objectStore("tracks");
+            for (let i = 0; i < files.length; i++) {
+                store.add({ name: files[i].name.replace('.mp3', ''), file: files[i] });
+            }
+            transaction.oncomplete = () => {
+                loadSavedTracks();
+                setTimeout(() => renderSongsList(), 100);
+            };
+        }
+    });
+
     audio.addEventListener('timeupdate', () => {
         if (isNaN(audio.duration)) return;
         const progress = (audio.currentTime / audio.duration) * 100;
@@ -286,13 +239,15 @@ document.addEventListener("DOMContentLoaded", () => {
         return `${min}:${sec < 10 ? '0' : ''}${sec}`;
     }
 
-    let initialBattery = 88; 
     setInterval(() => {
         const now = new Date();
         document.getElementById('live-time').innerText = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
-        if (now.getMinutes() % 12 === 0 && now.getSeconds() === 0) {
-            initialBattery = Math.max(5, initialBattery - 1);
-        }
-        document.getElementById('real-battery').innerText = `${initialBattery}% 🔋`;
     }, 1000);
+
+    if (navigator.getBattery) {
+        navigator.getBattery().then(b => {
+            const update = () => document.getElementById('real-battery').innerText = `${Math.round(b.level * 100)}% 🔋`;
+            update(); b.addEventListener('levelchange', update);
+        });
+    }
 });
